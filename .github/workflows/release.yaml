@@ -1,0 +1,45 @@
+name: pipeline
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-tags: true
+          fetch-depth: 0
+
+      - name: Setup Go environment
+        uses: actions/setup-go@v3.3.1
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+          cache: true
+
+      - name: release
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GOOS: wasip1
+          GOARCH: wasm
+        run: |
+          go build -o ./music-assistant_v1_flight.wasm ./flights/music-assistant.go
+          go build -o ./music-assistant_airway.wasm ./airways/music-assistant.go
+
+          find . -name '*.wasm' | xargs -n1 gzip
+
+          gh release upload latest --clobber *.wasm.gz
+
+          git tag -f latest
+          git push --tags -f
